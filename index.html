@@ -4,10 +4,11 @@
   <meta charset="UTF-8" />
   <title>메타공백; 두억시니의 낭독</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Language" content="ko" />
   <meta name="description" content="공백으로 공백을 섞어짜기" />
   <meta name="keywords" content="메타공백, 두억시니, 공백문자, 쓰기, 말하기" />
   <meta name="author" content="김지영" />
-  <!-- (선택) 만약 페이지 전체를 절대 번역되지 않게 하고 싶다면 다음 줄의 주석을 해제
+  <!-- 절대 번역 금지는 아님! (원하면 이 메타는 넣지 마세요)
   <meta name="google" content="notranslate" />
   -->
   <meta http-equiv="cache-control" content="no-cache" />
@@ -46,7 +47,7 @@
 
     .text-output {
       font-size: 1.5rem;
-      white-space: pre-wrap;      /* 줄바꿈/공백 유지 */
+      white-space: pre-wrap;
       padding: 1.5rem;
       padding-top: 20%;
       min-height: 1200px;
@@ -55,8 +56,8 @@
       text-align: left;
       line-height: 1.9;
       box-sizing: border-box;
-      overflow-wrap: break-word;  /* 긴 단어 강제 줄바꿈 */
-      word-break: keep-all;       /* 한글 단어단위 유지 */
+      overflow-wrap: break-word;
+      word-break: keep-all;
       transition: padding 0.3s ease;
     }
 
@@ -93,7 +94,6 @@
       pointer-events: none;
     }
 
-    /* 상태 표시(디버그) */
     #statusHint {
       position: fixed;
       top: 10px;
@@ -102,32 +102,71 @@
       pointer-events: none;
       font-size: 0.8rem;
       font-weight: 300;
-      color: rgba(0, 0, 0, 0);
+      color: rgba(0, 0, 0, 0); /* 시각적으로 숨김 */
     }
 
-    /* 내부 상태 보관용: 절대 번역 금지 + 화면/보조기기 모두 숨김 */
-    .notranslate {
-      unicode-bidi: plaintext; /* 일부 번역기/리더의 간섭을 줄이는 보조책 */
+    /* 언어 앵커: 화면 밖으로 보내되, DOM에는 존재(탐지용) */
+    #langAnchor {
+      position: absolute;
+      left: -9999px;
+      top: 0;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;   /* 스크롤/레이아웃 영향 최소화 */
+      opacity: 0;         /* 혹시라도 보이는 일 방지 */
+      pointer-events: none;
+      user-select: none;
+      /* display:none; 쓰지 마세요 — 탐지에서 제외될 수 있음 */
+    }
+
+    /* 내부 상태 저장용: 번역 금지 + 접근 숨김 */
+    #sourceText {
+      position: absolute;
+      left: -9999px;
+      top: 0;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0.001;
     }
   </style>
 </head>
 
 <body>
-  <!-- 출력은 번역 허용(translate 속성 제거). 이제 구글 번역이 켜지면 이 영역만 번역됩니다. -->
+  <!-- 출력은 번역 허용(translate 속성 제거) -->
   <div class="text-output" id="outputText" aria-live="off"></div>
 
-  <!-- 내부 상태 저장용: DOM에 두되 절대 번역/접근되지 않게 처리 -->
-  <div id="sourceText"
-       class="notranslate"
-       translate="no"
-       lang="zxx"
-       aria-hidden="true"
-       hidden></div>
+  <!-- 언어 앵커: 한국어 대량 텍스트(원문 언어 고정용 바이어스) -->
+  <div id="langAnchor" lang="ko" aria-hidden="true">
+    가나다라마바사아자차카타파하 바다라마사 아카자차타파하 가나다라마바사 아자차카타파하
+    우리는 바람처럼 흔들리며 말을 잇는다 공백은 말과 글 사이의 여백이며
+    이곳의 원문 언어는 한국어입니다 한국어 한국어 한국어 한국어 한국어
+  </div>
 
-  <div id="statusHint" translate="no" class="notranslate">ready</div>
+  <!-- 내부 상태 저장(번역 금지/접근 숨김). lang은 zxx: 언어 없음 -->
+  <div id="sourceText" translate="no" lang="zxx" aria-hidden="true"></div>
+
+  <div id="statusHint" translate="no" aria-hidden="true"></div>
   <footer>처언천히 또박또박 소리 내 읽어보세요</footer>
 
   <script>
+    /***********************
+     * 언어 잠금(탐지 뒤집기 방지)
+     * - 크롬의 재탐지를 회피하기 위해 html@lang을 ko로 고정
+     ***********************/
+    (function lockHtmlLang() {
+      const root = document.documentElement;
+      function enforce() {
+        if (root.lang !== 'ko') root.lang = 'ko';
+      }
+      enforce();
+      // 정기적으로 재고정(탐지기가 바꿔도 즉시 되돌림)
+      setInterval(enforce, 1500);
+      // MutationObserver로도 복구
+      const mo = new MutationObserver(() => enforce());
+      mo.observe(root, { attributes: true, attributeFilter: ['lang'] });
+    })();
+
     /***********************
      * 상수/전역 상태
      ***********************/
@@ -140,30 +179,23 @@
     let bitInterval;
     let hexQueue = [];
     let displayChars = [];
-
-    // 소스 문자열은 이제 "오직 JS 변수"로만 관리합니다.
-    let currentSourceString = "";
+    let currentSourceString = ""; // 오직 JS로만 관리
 
     /***********************
-     * 음성 인식 준비
+     * 음성 인식: 언어 고정(ko-KR)
      ***********************/
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.lang = "ko-KR"; // 초기값(텍스트에 맞춰 아래에서 자동 조정)
+    recognition.lang = "ko-KR"; // ★ 더 이상 동적으로 바꾸지 않음
 
-    /***********************
-     * 엘리먼트 참조
-     ***********************/
     const output = document.getElementById("outputText");
     const source = document.getElementById("sourceText");
     const statusHint = document.getElementById("statusHint");
 
     /***********************
-     * 원문(작품용) 데이터
-     * - 이 배열은 번역되면 안 됩니다.
-     * - 따라서 화면 바깥(내부 상태)로만 쓰고, 출력은 렌더링 결과만 번역되게 둡니다.
+     * 작품 텍스트(내부 상태 전용)
      ***********************/
     const poems = [
       `“의미 없는 노성을 토하며 두억시니들은 끊임없이 두 손으로, 혹 손이 없을 경우에는 입으로 물을 머금어 강물을 ‘파내었다.’ 당연한 일이지만 같은 부피의 흙에 대해서라면 소용이 있었을 그 방법도 거세게 흐르는 급류에는 아무런 영향을 끼치지 못하고 있었다.두억시니들은 아무리 퍼내어도 줄어들지 않는 강물에 난처해하고 분노했다. 그러나 두억시니는 그 짓을 멈추지 않았다. 수백의 두억시니가 강변에 몰려서서 강물을 퍼내고 있었고 그보다 많은 두억시니들이 그들의 배후에서 의미를 빚지 못하는 단어들로 주위를 소란스럽게 만들고 있었다. 무익한 목적에 바쳐진 과도한 노고가 자아내는 것은 웃음이나 슬픔뿐이다.” \n이영도의 ‘눈물을 마시는 새’ 중 발췌`,
@@ -176,37 +208,26 @@
       `‘의미를 빚지 못한 단어로 이루어진’ 문장들은 소설 『눈물을 마시는 새』에 등장하는 두억시니의 대사이다. 공백으로 공백을 정의하기 적절한 텍스트로서 두억시니의 말을 인용했다. 소설 속 두억시니는 신을 잃은 종족이다. 이들은 이치에 어긋난 육체와 공백으로 얼룩진 정신을 가졌다. 두억시니 모두의 정신은 서로 연결되었으며 스스로를 ‘나’들이라고 지칭한다. 두억시니의 모순적 정체성은 공백과 닮았다. 이 글을 쓴 글쓴이와 화자이자 독자인 당신은 의미가 되지 못한 글을 통해 글자 사이의 공백이 된다. 두억시니 같은 ‘나’들이 된다.  \n메타공백의 글쓴이 생각`,
     ];
 
-    /***********************
-     * 유틸/상태 표시
-     ***********************/
-    function setStatus(msg) {
-      if (statusHint) statusHint.textContent = msg;
-    }
-
     function doReload() {
       if (isReloading) return;
       isReloading = true;
       location.reload();
     }
 
-    /***********************
-     * 번역기 간섭을 받지 않는 내부 로직
-     ***********************/
-    const whitespaceHexMap = {
-      '\u200B': '0', '\u200C': '1', '\u200D': '2', '\u2060': '3',
-      '\u00A0': '4', '\u2002': '5', '\u2003': '6', '\u2004': '7',
-      '\u2005': '8', '\u2006': '9', '\u2007': 'a', '\u2008': 'b',
-      '\u2009': 'c', '\u200A': 'd', '\u202F': 'e', '\u205F': 'f'
-    };
-    const whitespaceChars = Object.keys(whitespaceHexMap);
-
     function getRandomBitSpace() {
-      const ch = whitespaceChars[(Math.random() * whitespaceChars.length) | 0];
+      const whitespaceHexMap = {
+        '\u200B': '0', '\u200C': '1', '\u200D': '2', '\u2060': '3',
+        '\u00A0': '4', '\u2002': '5', '\u2003': '6', '\u2004': '7',
+        '\u2005': '8', '\u2006': '9', '\u2007': 'a', '\u2008': 'b',
+        '\u2009': 'c', '\u200A': 'd', '\u202F': 'e', '\u205F': 'f'
+      };
+      const keys = Object.keys(whitespaceHexMap);
+      const ch = keys[(Math.random() * keys.length) | 0];
       const hx = whitespaceHexMap[ch];
       return {
         isSpace: true,
         hex: hx,
-        html: `<span class="bit-space notranslate" translate="no" title="hex: ${hx}">${ch}</span>`
+        html: `<span class="bit-space" translate="no" title="hex: ${hx}">${ch}</span>`
       };
     }
 
@@ -245,73 +266,35 @@
       const pos = (Math.random() * Math.max(1, displayChars.length - 1)) | 0;
       displayChars.splice(pos, 0, spaceObj);
 
-      hexQueue.push(spaceObj.hex);
-      if (hexQueue.length === 4) {
+      // 4비트 모이면 강제 치환
+      window.__hexQueue = window.__hexQueue || [];
+      window.__hexQueue.push(spaceObj.hex);
+      if (window.__hexQueue.length === 4) {
         const rndChar = currentSourceString[(Math.random() * currentSourceString.length) | 0] || ' ';
         displayChars.splice(pos, 4, { char: rndChar, stroke: MAX_STROKE, isSpace: false });
-        hexQueue = [];
+        window.__hexQueue = [];
       }
 
       updateDisplay();
     }
 
-    function changeColorWithRhythm() {
-      const timings = [2500, 1900, 1600];
-      let beat = 0;
-
-      function nextBeat() {
-        output.style.paddingLeft = `${(Math.random() * 30) | 0}px`;
-        output.style.paddingRight = `${(Math.random() * 30) | 0}px`;
-
-        let i = displayChars.length - 1;
-        while (i >= 0 && (displayChars[i].isSpace || displayChars[i].stroke >= MAX_STROKE)) i--;
-        if (i >= 0) displayChars[i].stroke++;
-
-        updateDisplay();
-
-        setTimeout(() => {
-          beat = (beat + 1) % timings.length;
-          nextBeat();
-        }, timings[beat]);
-      }
-      nextBeat();
-    }
-
-    function guessLangFromText(s) {
-      const hasHira = /[\u3040-\u309F]/.test(s);
-      const hasKata = /[\u30A0-\u30FF]/.test(s);
-      const hasLatin = /[A-Za-z]/.test(s);
-      if (hasHira || hasKata) return "ja-JP";
-      if (hasLatin) return "en-US";
-      return "ko-KR";
-    }
-
-    // 오직 JS 변수(currentSourceString)로부터 화면을 재구성
     function rebuildFromSourceString(newString) {
       currentSourceString = newString || "";
-      hexQueue = [];
+      window.__hexQueue = [];
       isAllBlurred = false;
 
-      // 내부 저장용 div는 기록만(디버그·검증), 번역 금지/숨김
+      // 내부 저장용 기록(탐지 영향 최소)
       source.textContent = currentSourceString;
 
       displayChars = currentSourceString.split('').map(ch => ({
         char: ch, stroke: 0, isSpace: false
       }));
 
-      // 음성 인식 언어는 원문 기준(번역 결과와 무관)
-      const lang = guessLangFromText(currentSourceString);
-      if (recognition.lang !== lang) {
-        try { recognition.stop(); } catch {}
-        recognition.lang = lang;
-        try { recognition.start(); } catch {}
-      }
-
       updateDisplay();
     }
 
     /***********************
-     * 음성인식 콜백
+     * 음성인식 콜백(라틴 상태표시 제거)
      ***********************/
     recognition.onresult = (evt) => {
       const transcript = evt.results[evt.results.length - 1][0].transcript.trim();
@@ -322,28 +305,27 @@
         if (!o.isSpace && transcript.includes(o.char)) {
           const sp = getRandomBitSpace();
           displayChars[i] = sp;
-          hexQueue.push(sp.hex);
 
-          if (hexQueue.length === 4) {
+          window.__hexQueue = window.__hexQueue || [];
+          window.__hexQueue.push(sp.hex);
+
+          if (window.__hexQueue.length === 4) {
             const rnd = currentSourceString[(Math.random() * currentSourceString.length) | 0] || ' ';
             const start = Math.max(0, i - 3);
             displayChars.splice(start, 4, { char: rnd, stroke: 0, isSpace: false });
-            hexQueue = [];
+            window.__hexQueue = [];
           }
         }
       }
       updateDisplay();
     };
     recognition.onerror = e => console.error("Speech error:", e.error);
-    recognition.onend = () => {
-      try { recognition.start(); } catch {}
-    };
+    recognition.onend = () => { try { recognition.start(); } catch {} };
 
     /***********************
      * 시작 루틴
      ***********************/
     function start() {
-      // 이미 보여준 인덱스 관리(순환)
       let shown = JSON.parse(localStorage.getItem('shownPoemIndexes')) || [];
       if (shown.length >= poems.length) shown = [];
       const avail = poems.map((_, i) => i).filter(i => !shown.includes(i));
@@ -353,24 +335,30 @@
 
       const selectedPoem = poems[idx];
 
-      // 🔴 핵심: 소스 문자열은 여기서만 설정. DOM 번역과 무관.
       rebuildFromSourceString(selectedPoem);
 
       try { recognition.start(); } catch {}
-      changeColorWithRhythm();
-      bitInterval = setInterval(insertRandomBitSpace, BIT_INTERVAL_MS);
-      setStatus(`LANG:${guessLangFromText(currentSourceString)}`);
+      setTimeout(() => {
+        bitInterval = setInterval(insertRandomBitSpace, BIT_INTERVAL_MS);
+      }, 150);
     }
 
     /***********************
-     * 입력 장치(클릭/키보드/게임패드) → 새로고침
+     * 입력 장치 → 새로고침
      ***********************/
-    document.body.addEventListener('click', doReload);
+    function doReloadAndKeepLang() {
+      // 새로고침 직전에도 lang 잠금(혹시라도 해제된 경우)
+      if (document.documentElement.lang !== 'ko') document.documentElement.lang = 'ko';
+      doReload();
+    }
+
+    document.body.addEventListener('click', doReloadAndKeepLang);
     document.addEventListener('keydown', (e) => {
       e.preventDefault();
-      doReload();
+      doReloadAndKeepLang();
     }, { passive: false });
 
+    // 게임패드
     let gamepadIndexes = [];
     let prevButtonStates = {};
     window.addEventListener('gamepadconnected', (e) => {
@@ -390,7 +378,7 @@
           const key = `${idx}_${bIndex}`;
           const wasPressed = prevButtonStates[key] || false;
           const isPressed = btn.pressed === true;
-          if (isPressed && !wasPressed) doReload();
+          if (isPressed && !wasPressed) doReloadAndKeepLang();
           prevButtonStates[key] = isPressed;
         });
       });
