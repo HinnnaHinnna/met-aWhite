@@ -8,9 +8,6 @@
   <meta name="description" content="공백으로 공백을 섞어짜기" />
   <meta name="keywords" content="메타공백, 두억시니, 공백문자, 쓰기, 말하기" />
   <meta name="author" content="김지영" />
-  <!-- 절대 번역 금지는 아님! (원하면 이 메타는 넣지 마세요)
-  <meta name="google" content="notranslate" />
-  -->
   <meta http-equiv="cache-control" content="no-cache" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
@@ -74,101 +71,54 @@
       position: relative;
       cursor: help;
     }
-
-    .bit-space::after {
-      content: " ";
-      position: absolute;
-      color: rgba(0, 0, 0, 0);
-    }
+    .bit-space::after { content: " "; position: absolute; color: rgba(0,0,0,0); }
 
     footer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      text-align: left;
-      font-size: 0.8rem;
-      font-weight: 300;
-      padding: 1rem;
-      font-family: 'Noto Sans KR';
-      pointer-events: none;
+      position: fixed; bottom: 0; left: 0; width: 100%;
+      text-align: left; font-size: 0.8rem; font-weight: 300; padding: 1rem;
+      font-family: 'Noto Sans KR'; pointer-events: none;
     }
 
+    /* 번역-세이프 모드가 켜지면, 인터랙션이 멈춘 상태임을 사용자에게(거의 보이지 않게) 표시 */
     #statusHint {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      font-family: 'Noto Sans KR';
-      pointer-events: none;
-      font-size: 0.8rem;
-      font-weight: 300;
-      color: rgba(0, 0, 0, 0); /* 시각적으로 숨김 */
+      position: fixed; top: 10px; right: 10px;
+      font-family: 'Noto Sans KR'; font-size: 0.8rem; font-weight: 300;
+      color: rgba(0,0,0,0.25); pointer-events: none;
     }
 
-    /* 언어 앵커: 화면 밖으로 보내되, DOM에는 존재(탐지용) */
+    /* 언어 앵커: 한국어 문양을 화면 밖에 배치(언어 탐지 바이어스) */
     #langAnchor {
-      position: absolute;
-      left: -9999px;
-      top: 0;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;   /* 스크롤/레이아웃 영향 최소화 */
-      opacity: 0;         /* 혹시라도 보이는 일 방지 */
-      pointer-events: none;
-      user-select: none;
-      /* display:none; 쓰지 마세요 — 탐지에서 제외될 수 있음 */
+      position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;
+      overflow: hidden; opacity: 0; pointer-events: none; user-select: none;
     }
 
-    /* 내부 상태 저장용: 번역 금지 + 접근 숨김 */
+    /* 내부 상태 저장소(번역 금지) */
     #sourceText {
-      position: absolute;
-      left: -9999px;
-      top: 0;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      opacity: 0.001;
+      position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;
+      overflow: hidden; opacity: 0.001;
     }
   </style>
 </head>
 
 <body>
-  <!-- 출력은 번역 허용(translate 속성 제거) -->
+  <!-- 출력은 번역 허용(translate 속성 없음) -->
   <div class="text-output" id="outputText" aria-live="off"></div>
 
-  <!-- 언어 앵커: 한국어 대량 텍스트(원문 언어 고정용 바이어스) -->
+  <!-- 언어 앵커 -->
   <div id="langAnchor" lang="ko" aria-hidden="true">
-    가나다라마바사아자차카타파하 바다라마사 아카자차타파하 가나다라마바사 아자차카타파하
-    우리는 바람처럼 흔들리며 말을 잇는다 공백은 말과 글 사이의 여백이며
-    이곳의 원문 언어는 한국어입니다 한국어 한국어 한국어 한국어 한국어
+    한글 한국어 가나다라마바사아자차카타파하 바람, 공백, 말과 글 사이의 여백.
+    이 페이지의 원문 언어는 한국어입니다.
   </div>
 
-  <!-- 내부 상태 저장(번역 금지/접근 숨김). lang은 zxx: 언어 없음 -->
+  <!-- 내부 상태(번역 금지) -->
   <div id="sourceText" translate="no" lang="zxx" aria-hidden="true"></div>
 
-  <div id="statusHint" translate="no" aria-hidden="true"></div>
+  <div id="statusHint" translate="no">ready</div>
   <footer>처언천히 또박또박 소리 내 읽어보세요</footer>
 
   <script>
     /***********************
-     * 언어 잠금(탐지 뒤집기 방지)
-     * - 크롬의 재탐지를 회피하기 위해 html@lang을 ko로 고정
-     ***********************/
-    (function lockHtmlLang() {
-      const root = document.documentElement;
-      function enforce() {
-        if (root.lang !== 'ko') root.lang = 'ko';
-      }
-      enforce();
-      // 정기적으로 재고정(탐지기가 바꿔도 즉시 되돌림)
-      setInterval(enforce, 1500);
-      // MutationObserver로도 복구
-      const mo = new MutationObserver(() => enforce());
-      mo.observe(root, { attributes: true, attributeFilter: ['lang'] });
-    })();
-
-    /***********************
-     * 상수/전역 상태
+     * 전역 상태
      ***********************/
     const MAX_STROKE = 2;
     const BLUR_MULTIPLIER = 20;
@@ -176,27 +126,24 @@
 
     let isAllBlurred = false;
     let isReloading = false;
-    let bitInterval;
     let hexQueue = [];
     let displayChars = [];
-    let currentSourceString = ""; // 오직 JS로만 관리
+    let bitInterval = null;
+    let rhythmTimer = null;   // setTimeout 체인 관리
+    let translateSafeMode = false; // ★ 번역-세이프 모드 스위치
 
-    /***********************
-     * 음성 인식: 언어 고정(ko-KR)
-     ***********************/
+    let currentSourceString = ""; // 원문은 오직 JS 변수로만
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.lang = "ko-KR"; // ★ 더 이상 동적으로 바꾸지 않음
+    recognition.lang = "ko-KR"; // 동적 변경 안함(깜빡임 유발 요인 제거)
 
     const output = document.getElementById("outputText");
     const source = document.getElementById("sourceText");
     const statusHint = document.getElementById("statusHint");
 
-    /***********************
-     * 작품 텍스트(내부 상태 전용)
-     ***********************/
     const poems = [
       `“의미 없는 노성을 토하며 두억시니들은 끊임없이 두 손으로, 혹 손이 없을 경우에는 입으로 물을 머금어 강물을 ‘파내었다.’ 당연한 일이지만 같은 부피의 흙에 대해서라면 소용이 있었을 그 방법도 거세게 흐르는 급류에는 아무런 영향을 끼치지 못하고 있었다.두억시니들은 아무리 퍼내어도 줄어들지 않는 강물에 난처해하고 분노했다. 그러나 두억시니는 그 짓을 멈추지 않았다. 수백의 두억시니가 강변에 몰려서서 강물을 퍼내고 있었고 그보다 많은 두억시니들이 그들의 배후에서 의미를 빚지 못하는 단어들로 주위를 소란스럽게 만들고 있었다. 무익한 목적에 바쳐진 과도한 노고가 자아내는 것은 웃음이나 슬픔뿐이다.” \n이영도의 ‘눈물을 마시는 새’ 중 발췌`,
       `네 발바닥 즐거운! 푸르다! 손! 밤! 아홉의 오른쪽 물거품!  `,
@@ -208,178 +155,237 @@
       `‘의미를 빚지 못한 단어로 이루어진’ 문장들은 소설 『눈물을 마시는 새』에 등장하는 두억시니의 대사이다. 공백으로 공백을 정의하기 적절한 텍스트로서 두억시니의 말을 인용했다. 소설 속 두억시니는 신을 잃은 종족이다. 이들은 이치에 어긋난 육체와 공백으로 얼룩진 정신을 가졌다. 두억시니 모두의 정신은 서로 연결되었으며 스스로를 ‘나’들이라고 지칭한다. 두억시니의 모순적 정체성은 공백과 닮았다. 이 글을 쓴 글쓴이와 화자이자 독자인 당신은 의미가 되지 못한 글을 통해 글자 사이의 공백이 된다. 두억시니 같은 ‘나’들이 된다.  \n메타공백의 글쓴이 생각`,
     ];
 
-    function doReload() {
+    const whitespaceHexMap = {
+      '\u200B':'0','\u200C':'1','\u200D':'2','\u2060':'3',
+      '\u00A0':'4','\u2002':'5','\u2003':'6','\u2004':'7',
+      '\u2005':'8','\u2006':'9','\u2007':'a','\u2008':'b',
+      '\u2009':'c','\u200A':'d','\u202F':'e','\u205F':'f'
+    };
+    const whitespaceChars = Object.keys(whitespaceHexMap);
+
+    function setStatus(msg){ statusHint.textContent = msg; }
+
+    function doReload(){
+      if (translateSafeMode) return; // 번역 중엔 새로고침 금지(깜빡임 유발)
       if (isReloading) return;
       isReloading = true;
       location.reload();
     }
 
     function getRandomBitSpace() {
-      const whitespaceHexMap = {
-        '\u200B': '0', '\u200C': '1', '\u200D': '2', '\u2060': '3',
-        '\u00A0': '4', '\u2002': '5', '\u2003': '6', '\u2004': '7',
-        '\u2005': '8', '\u2006': '9', '\u2007': 'a', '\u2008': 'b',
-        '\u2009': 'c', '\u200A': 'd', '\u202F': 'e', '\u205F': 'f'
-      };
-      const keys = Object.keys(whitespaceHexMap);
-      const ch = keys[(Math.random() * keys.length) | 0];
+      const ch = whitespaceChars[(Math.random()*whitespaceChars.length)|0];
       const hx = whitespaceHexMap[ch];
-      return {
-        isSpace: true,
-        hex: hx,
-        html: `<span class="bit-space" translate="no" title="hex: ${hx}">${ch}</span>`
+      return { isSpace:true, hex:hx,
+        html:`<span class="bit-space" translate="no" title="hex: ${hx}">${ch}</span>`
       };
     }
 
     function updateDisplay() {
-      output.innerHTML = displayChars.map(o => {
+      // 번역 중에는 DOM 업데이트 최소화(필요할 때만)
+      const html = displayChars.map(o=>{
         if (o.isSpace) return o.html;
         if (o.char === '\n') return '<br>';
         const strokePx = Math.min(o.stroke, MAX_STROKE);
-        const blurPx = strokePx * BLUR_MULTIPLIER;
+        const blurPx   = strokePx * BLUR_MULTIPLIER;
         return `<span class="char" style="-webkit-text-stroke-width:${strokePx}px; filter: blur(${blurPx}px)">${o.char}</span>`;
       }).join('');
+      if (output.innerHTML !== html) output.innerHTML = html;
 
-      const total = displayChars.filter(o => !o.isSpace).length;
-      const blurred = displayChars.filter(o => !o.isSpace && o.stroke >= MAX_STROKE).length;
-      if (!isAllBlurred && total > 0 && blurred === total) {
-        isAllBlurred = true;
-        clearInterval(bitInterval);
-        recognition.stop();
-        doReload();
+      if (!translateSafeMode) {
+        const total   = displayChars.filter(o=>!o.isSpace).length;
+        const blurred = displayChars.filter(o=>!o.isSpace && o.stroke >= MAX_STROKE).length;
+        if (!isAllBlurred && total>0 && blurred===total){
+          isAllBlurred = true;
+          stopDynamics();
+          recognition.stop();
+          doReload();
+        }
       }
     }
 
-    function insertRandomBitSpace() {
-      const unblurredCount = displayChars.filter(o => !o.isSpace && o.stroke < MAX_STROKE).length;
-      if (isAllBlurred || unblurredCount === 0) {
-        clearInterval(bitInterval);
-        return;
-      }
+    function insertRandomBitSpace(){
+      if (translateSafeMode) return; // 번역 중엔 정지
+      const unblurredCount = displayChars.filter(o=>!o.isSpace && o.stroke<MAX_STROKE).length;
+      if (isAllBlurred || unblurredCount===0){ clearInterval(bitInterval); bitInterval=null; return; }
 
       const spaceObj = getRandomBitSpace();
+      if (displayChars.length && displayChars.at(-1).isSpace) displayChars.pop();
 
-      if (displayChars.length && displayChars.at(-1).isSpace) {
-        displayChars.pop();
-      }
-
-      const pos = (Math.random() * Math.max(1, displayChars.length - 1)) | 0;
+      const pos = (Math.random()*Math.max(1, displayChars.length-1))|0;
       displayChars.splice(pos, 0, spaceObj);
 
-      // 4비트 모이면 강제 치환
-      window.__hexQueue = window.__hexQueue || [];
-      window.__hexQueue.push(spaceObj.hex);
-      if (window.__hexQueue.length === 4) {
-        const rndChar = currentSourceString[(Math.random() * currentSourceString.length) | 0] || ' ';
-        displayChars.splice(pos, 4, { char: rndChar, stroke: MAX_STROKE, isSpace: false });
-        window.__hexQueue = [];
+      hexQueue.push(spaceObj.hex);
+      if (hexQueue.length===4){
+        const rndChar = currentSourceString[(Math.random()*currentSourceString.length)|0] || ' ';
+        displayChars.splice(pos,4,{char:rndChar, stroke:MAX_STROKE, isSpace:false});
+        hexQueue = [];
       }
-
       updateDisplay();
     }
 
-    function rebuildFromSourceString(newString) {
-      currentSourceString = newString || "";
-      window.__hexQueue = [];
+    function startRhythm(){
+      let beat = 0; const timings=[2500,1900,1600];
+      function nextBeat(){
+        if (translateSafeMode) { rhythmTimer=null; return; } // 번역 중엔 루프 정지
+        output.style.paddingLeft  = `${(Math.random()*30)|0}px`;
+        output.style.paddingRight = `${(Math.random()*30)|0}px`;
+
+        let i = displayChars.length-1;
+        while(i>=0 && (displayChars[i].isSpace || displayChars[i].stroke>=MAX_STROKE)) i--;
+        if (i>=0) displayChars[i].stroke++;
+
+        updateDisplay();
+        beat=(beat+1)%timings.length;
+        rhythmTimer = setTimeout(nextBeat, timings[beat]);
+      }
+      nextBeat();
+    }
+
+    function rebuildFromSourceString(s){
+      currentSourceString = s || "";
+      hexQueue = [];
       isAllBlurred = false;
 
-      // 내부 저장용 기록(탐지 영향 최소)
+      // 내부 기록(번역 금지 DOM)
       source.textContent = currentSourceString;
 
-      displayChars = currentSourceString.split('').map(ch => ({
-        char: ch, stroke: 0, isSpace: false
-      }));
-
+      displayChars = currentSourceString.split('').map(ch=>({char:ch, stroke:0, isSpace:false}));
       updateDisplay();
     }
 
     /***********************
-     * 음성인식 콜백(라틴 상태표시 제거)
+     * 음성인식(번역 중엔 중단)
      ***********************/
-    recognition.onresult = (evt) => {
-      const transcript = evt.results[evt.results.length - 1][0].transcript.trim();
+    recognition.onresult = (evt)=>{
+      if (translateSafeMode) return; // 번역 중엔 중단
+      const transcript = evt.results[evt.results.length-1][0].transcript.trim();
       if (!transcript) return;
 
-      for (let i = 0; i < displayChars.length; i++) {
+      for (let i=0;i<displayChars.length;i++){
         const o = displayChars[i];
-        if (!o.isSpace && transcript.includes(o.char)) {
+        if (!o.isSpace && transcript.includes(o.char)){
           const sp = getRandomBitSpace();
-          displayChars[i] = sp;
-
-          window.__hexQueue = window.__hexQueue || [];
-          window.__hexQueue.push(sp.hex);
-
-          if (window.__hexQueue.length === 4) {
-            const rnd = currentSourceString[(Math.random() * currentSourceString.length) | 0] || ' ';
-            const start = Math.max(0, i - 3);
-            displayChars.splice(start, 4, { char: rnd, stroke: 0, isSpace: false });
-            window.__hexQueue = [];
+          displayChars[i]=sp;
+          hexQueue.push(sp.hex);
+          if (hexQueue.length===4){
+            const rnd = currentSourceString[(Math.random()*currentSourceString.length)|0] || ' ';
+            const start = Math.max(0, i-3);
+            displayChars.splice(start,4,{char:rnd, stroke:0, isSpace:false});
+            hexQueue=[];
           }
         }
       }
       updateDisplay();
     };
     recognition.onerror = e => console.error("Speech error:", e.error);
-    recognition.onend = () => { try { recognition.start(); } catch {} };
+    recognition.onend   = () => { if (!translateSafeMode){ try{ recognition.start(); }catch{} } };
+
+    /***********************
+     * 번역-세이프 모드 제어
+     * - 크롬/구글 번역이 활성화되면 html에 'translated-ltr/rtl' 클래스를 붙이거나
+     *   번역 배너 iframe을 삽입합니다. 이 신호를 감지해 동작을 일시 정지합니다.
+     ***********************/
+    function isTranslateActive(){
+      const html = document.documentElement;
+      if (/\btranslated-(ltr|rtl)\b/.test(html.className)) return true;
+      if (document.querySelector('iframe.goog-te-banner-frame')) return true;
+      if (location.hostname.includes('translate.goog')) return true;
+      return false;
+    }
+
+    function startDynamics(){
+      // 이미 돌아가면 패스
+      if (!bitInterval) bitInterval = setInterval(insertRandomBitSpace, BIT_INTERVAL_MS);
+      if (!rhythmTimer) startRhythm();
+      try{ recognition.start(); }catch{}
+      setStatus('running');
+    }
+
+    function stopDynamics(){
+      if (bitInterval){ clearInterval(bitInterval); bitInterval=null; }
+      if (rhythmTimer){ clearTimeout(rhythmTimer); rhythmTimer=null; }
+      try{ recognition.stop(); }catch{}
+    }
+
+    function enterTranslateSafeMode(){
+      if (translateSafeMode) return;
+      translateSafeMode = true;
+      stopDynamics();
+      setStatus('translation-safe mode'); // 아주 옅게 표시
+    }
+
+    function exitTranslateSafeMode(){
+      if (!translateSafeMode) return;
+      translateSafeMode = false;
+      setStatus('resumed');
+      startDynamics();
+    }
+
+    // HTML class/DOM 변화를 감지해서 모드 전환
+    const translateObserver = new MutationObserver(()=>{
+      if (isTranslateActive()) enterTranslateSafeMode();
+      else                     exitTranslateSafeMode();
+    });
+    translateObserver.observe(document.documentElement, { attributes:true, attributeFilter:['class'] });
+
+    // 배너 iframe 등장/제거도 감지
+    const bodyObserver = new MutationObserver(()=>{
+      if (isTranslateActive()) enterTranslateSafeMode();
+      else                     exitTranslateSafeMode();
+    });
+    bodyObserver.observe(document.body, { childList:true, subtree:true });
+
+    // 주기적 폴링(보험)
+    setInterval(()=>{
+      if (isTranslateActive()) enterTranslateSafeMode();
+      else                     exitTranslateSafeMode();
+    }, 1000);
 
     /***********************
      * 시작 루틴
      ***********************/
-    function start() {
+    function start(){
+      // 한국어 lang 속성 유지(탐지기 되돌림 방지)
+      if (document.documentElement.lang !== 'ko') document.documentElement.lang = 'ko';
+
       let shown = JSON.parse(localStorage.getItem('shownPoemIndexes')) || [];
       if (shown.length >= poems.length) shown = [];
-      const avail = poems.map((_, i) => i).filter(i => !shown.includes(i));
-      const idx = avail[Math.floor(Math.random() * avail.length)];
+      const avail = poems.map((_,i)=>i).filter(i=>!shown.includes(i));
+      const idx = avail[Math.floor(Math.random()*avail.length)];
       shown.push(idx);
       localStorage.setItem('shownPoemIndexes', JSON.stringify(shown));
 
-      const selectedPoem = poems[idx];
+      rebuildFromSourceString(poems[idx]);
 
-      rebuildFromSourceString(selectedPoem);
-
-      try { recognition.start(); } catch {}
-      setTimeout(() => {
-        bitInterval = setInterval(insertRandomBitSpace, BIT_INTERVAL_MS);
-      }, 150);
+      // 번역이 이미 켜져 있으면 세이프 모드부터, 아니면 바로 시작
+      if (isTranslateActive()) enterTranslateSafeMode();
+      else startDynamics();
     }
 
     /***********************
-     * 입력 장치 → 새로고침
+     * 입력 → 새로고침(번역 중엔 차단)
      ***********************/
-    function doReloadAndKeepLang() {
-      // 새로고침 직전에도 lang 잠금(혹시라도 해제된 경우)
-      if (document.documentElement.lang !== 'ko') document.documentElement.lang = 'ko';
-      doReload();
-    }
+    document.body.addEventListener('click', ()=>{ doReload(); });
+    document.addEventListener('keydown', (e)=>{ e.preventDefault(); doReload(); }, { passive:false });
 
-    document.body.addEventListener('click', doReloadAndKeepLang);
-    document.addEventListener('keydown', (e) => {
-      e.preventDefault();
-      doReloadAndKeepLang();
-    }, { passive: false });
-
-    // 게임패드
-    let gamepadIndexes = [];
-    let prevButtonStates = {};
-    window.addEventListener('gamepadconnected', (e) => {
+    // 게임패드도 번역 중엔 차단
+    let gamepadIndexes = [], prevButtonStates = {};
+    window.addEventListener('gamepadconnected', (e)=>{
       if (!gamepadIndexes.includes(e.gamepad.index)) gamepadIndexes.push(e.gamepad.index);
-      console.log('Gamepad connected:', e.gamepad.id);
     });
-    window.addEventListener('gamepaddisconnected', (e) => {
-      gamepadIndexes = gamepadIndexes.filter(i => i !== e.gamepad.index);
-      console.log('Gamepad disconnected:', e.gamepad.id);
+    window.addEventListener('gamepaddisconnected', (e)=>{
+      gamepadIndexes = gamepadIndexes.filter(i=>i!==e.gamepad.index);
     });
-    function pollGamepads() {
+    function pollGamepads(){
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      gamepadIndexes.forEach(idx => {
-        const gp = pads[idx];
-        if (!gp) return;
-        gp.buttons.forEach((btn, bIndex) => {
+      gamepadIndexes.forEach(idx=>{
+        const gp = pads[idx]; if (!gp) return;
+        gp.buttons.forEach((btn,bIndex)=>{
           const key = `${idx}_${bIndex}`;
-          const wasPressed = prevButtonStates[key] || false;
-          const isPressed = btn.pressed === true;
-          if (isPressed && !wasPressed) doReloadAndKeepLang();
-          prevButtonStates[key] = isPressed;
+          const was = prevButtonStates[key] || false;
+          const now = btn.pressed===true;
+          if (now && !was) doReload();
+          prevButtonStates[key] = now;
         });
       });
       requestAnimationFrame(pollGamepads);
