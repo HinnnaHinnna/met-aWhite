@@ -6,7 +6,7 @@
   <title>메타공백; 두억시니의 낭독</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="공백으로 공백을 섞어짜기" />
-  <meta name="keywords" content="메타공백, 두억시니, 공백문자, 쓰기, 말하기" />
+  <meta name="keywords" content="메타공백, 두억시니,공백 문자, 눈물을 마시는 새" />
   <meta name="author" content="김지영" />
   <meta http-equiv="cache-control" content="no-cache" />
   <meta http-equiv="pragma" content="no-cache" />
@@ -35,12 +35,10 @@
     }
 
     body {
-      font-family: 'MapoGoldenPier', 'Noto Serif KR', sans-serif;
+      font-family: 'MapoGoldenPier', 'Noto Sans KR', sans-serif;
       background: #ffffff;
       display: flex;
       justify-content: center;
-      position: relative;
-      cursor: pointer;
     }
 
     .text-output {
@@ -89,41 +87,14 @@
       font-weight: 300;
       padding: 1rem;
       font-family: 'Noto Sans KR';
-      pointer-events: none;
-    }
-
-    #sourceText {
-      position: absolute;
-      left: -9999px;
-      top: 0;
-      width: 1px;
-      height: auto;
-      opacity: 0.001;
-      pointer-events: none;
-      user-select: none;
-      white-space: pre-wrap;
-    }
-
-    #statusHint {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      font-family: 'Noto Sans KR';
-      pointer-events: none;
-      font-size: 0.8rem;
-      font-weight: 300;
-      color: rgba(0, 0, 0, 0);
     }
   </style>
 </head>
 
-<body>
-  <div class="text-output" id="outputText" translate="no" aria-live="off"></div>
+<body onclick="location.reload()">
 
-  <div id="sourceText" translate="yes"></div>
-
-  <div id="statusHint" translate="no">ready</div>
-  <footer>처언천히 또박또박 소리 내 읽어보세요</footer>
+  <div class="text-output" id="outputText"></div>
+  <footer>소리내어 읽어 보세요</footer>
 
   <script>
     const MAX_STROKE = 2;
@@ -131,22 +102,6 @@
     const BIT_INTERVAL_MS = 1000;
 
     let isAllBlurred = false;
-    let isReloading = false;
-    let bitInterval;
-    let hexQueue = [];
-    let displayChars = [];
-    let currentSourceString = "";
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = "ko-KR";
-
-    const output = document.getElementById("outputText");
-    const source = document.getElementById("sourceText");
-    const statusHint = document.getElementById("statusHint");
-
 
     const poems = [
       `네 발바닥 즐거운! 푸르다! 손! 밤! 아홉의 오른쪽 물거품!  `,
@@ -157,27 +112,67 @@
       `팔짝 뛰는 토끼색 칠한 재채기 세 쌍만 던져!  `
     ];
 
+    let shown = JSON.parse(localStorage.getItem('shownPoemIndexes')) || [];
+
+    if (shown.length >= poems.length) shown = [];
+
+    const avail = poems
+      .map((_, i) => i)
+      .filter(i => !shown.includes(i));
+
+    const idx = avail[Math.floor(Math.random() * avail.length)];
+
+    shown.push(idx);
+
+    localStorage.setItem(
+      'shownPoemIndexes',
+      JSON.stringify(shown)
+    );
+
+    const selectedPoem = poems[idx];
+
+    const output = document.getElementById("outputText");
+
     const whitespaceHexMap = {
-      '\u200B': '0', '\u200C': '1', '\u200D': '2', '\u2060': '3',
-      '\u00A0': '4', '\u2002': '5', '\u2003': '6', '\u2004': '7',
-      '\u2005': '8', '\u2006': '9', '\u2007': 'a', '\u2008': 'b',
-      '\u2009': 'c', '\u200A': 'd', '\u202F': 'e', '\u205F': 'f'
+      '\u200B': '0',
+      '\u200C': '1',
+      '\u200D': '2',
+      '\u2060': '3',
+      '\u00A0': '4',
+      '\u2002': '5',
+      '\u2003': '6',
+      '\u2004': '7',
+      '\u2005': '8',
+      '\u2006': '9',
+      '\u2007': 'a',
+      '\u2008': 'b',
+      '\u2009': 'c',
+      '\u200A': 'd',
+      '\u202F': 'e',
+      '\u205F': 'f'
     };
+
     const whitespaceChars = Object.keys(whitespaceHexMap);
 
-    function doReload() {
-      if (isReloading) return;
-      isReloading = true;
-      location.reload();
-    }
+    let displayChars = selectedPoem
+      .split('')
+      .map(ch => ({
+        char: ch,
+        stroke: 0,
+        isSpace: false
+      }));
 
-    function setStatus(msg) {
-      if (statusHint) statusHint.textContent = msg;
-    }
+    let hexQueue = [];
+    let bitInterval;
 
     function getRandomBitSpace() {
-      const ch = whitespaceChars[(Math.random() * whitespaceChars.length) | 0];
+      const ch =
+        whitespaceChars[
+        Math.floor(Math.random() * whitespaceChars.length)
+        ];
+
       const hx = whitespaceHexMap[ch];
+
       return {
         isSpace: true,
         hex: hx,
@@ -186,61 +181,65 @@
     }
 
     function updateDisplay() {
-      output.innerHTML = displayChars.map(o => {
-        if (o.isSpace) return o.html;
-        if (o.char === '\n') return '<br>';
-        const strokePx = Math.min(o.stroke, MAX_STROKE);
-        const blurPx = strokePx * BLUR_MULTIPLIER;
-        return `<span class="char" style="-webkit-text-stroke-width:${strokePx}px; filter: blur(${blurPx}px)">${o.char}</span>`;
-      }).join('');
+      output.innerHTML = displayChars
+        .map(o => {
+          if (o.isSpace) return o.html;
 
-      const total = displayChars.filter(o => !o.isSpace).length;
-      const blurred = displayChars.filter(o => !o.isSpace && o.stroke >= MAX_STROKE).length;
-      if (!isAllBlurred && total > 0 && blurred === total) {
+          const strokePx = Math.min(o.stroke, MAX_STROKE);
+          const blurPx = strokePx * BLUR_MULTIPLIER;
+
+          if (o.char === '\n') return '<br>';
+
+          return `<span class="char" style="-webkit-text-stroke-width:${strokePx}px; filter: blur(${blurPx}px)">${o.char}</span>`;
+        })
+        .join('');
+
+      const total =
+        displayChars.filter(o => !o.isSpace).length;
+
+      const blurred =
+        displayChars.filter(
+          o => !o.isSpace && o.stroke >= MAX_STROKE
+        ).length;
+
+      if (
+        !isAllBlurred &&
+        total > 0 &&
+        blurred === total
+      ) {
         isAllBlurred = true;
         clearInterval(bitInterval);
         recognition.stop();
-        doReload();
+        location.reload();
       }
-    }
-
-    function insertRandomBitSpace() {
-      const unblurredCount = displayChars.filter(o => !o.isSpace && o.stroke < MAX_STROKE).length;
-      if (isAllBlurred || unblurredCount === 0) {
-        clearInterval(bitInterval);
-        return;
-      }
-
-      const spaceObj = getRandomBitSpace();
-
-      if (displayChars.length && displayChars.at(-1).isSpace) {
-        displayChars.pop();
-      }
-
-      const pos = (Math.random() * Math.max(1, displayChars.length - 1)) | 0;
-      displayChars.splice(pos, 0, spaceObj);
-      hexQueue.push(spaceObj.hex);
-
-      if (hexQueue.length === 4) {
-        const rndChar = currentSourceString[(Math.random() * currentSourceString.length) | 0] || ' ';
-        displayChars.splice(pos, 4, { char: rndChar, stroke: MAX_STROKE, isSpace: false });
-        hexQueue = [];
-      }
-
-      updateDisplay();
     }
 
     function changeColorWithRhythm() {
-      const timings = [2500, 1900, 1600];
+      const timings = [700, 400, 300];
       let beat = 0;
 
       function nextBeat() {
-        output.style.paddingLeft = `${(Math.random() * 30) | 0}px`;
-        output.style.paddingRight = `${(Math.random() * 30) | 0}px`;
+        output.style.paddingLeft =
+          `${Math.random() * 30 | 0}px`;
+
+        output.style.paddingRight =
+          `${Math.random() * 30 | 0}px`;
 
         let i = displayChars.length - 1;
-        while (i >= 0 && (displayChars[i].isSpace || displayChars[i].stroke >= MAX_STROKE)) i--;
-        if (i >= 0) displayChars[i].stroke++;
+
+        while (
+          i >= 0 &&
+          (
+            displayChars[i].isSpace ||
+            displayChars[i].stroke >= MAX_STROKE
+          )
+        ) {
+          i--;
+        }
+
+        if (i >= 0) {
+          displayChars[i].stroke++;
+        }
 
         updateDisplay();
 
@@ -249,140 +248,160 @@
           nextBeat();
         }, timings[beat]);
       }
+
       nextBeat();
     }
 
-    function guessLangFromText(s) {
-      const hasHira = /[\u3040-\u309F]/.test(s);
-      const hasKata = /[\u30A0-\u30FF]/.test(s);
-      const hasLatin = /[A-Za-z]/.test(s);
-      if (hasHira || hasKata) return "ja-JP";
-      if (hasLatin) return "en-US";
-      return "ko-KR";
-    }
+    function insertRandomBitSpace() {
+      const unblurredCount =
+        displayChars.filter(
+          o => !o.isSpace && o.stroke < MAX_STROKE
+        ).length;
 
-    function rebuildFromSourceString(newString) {
-      currentSourceString = newString || "";
-      hexQueue = [];
-      isAllBlurred = false;
+      if (
+        isAllBlurred ||
+        unblurredCount === 0
+      ) {
+        clearInterval(bitInterval);
+        return;
+      }
 
-      displayChars = currentSourceString.split('').map(ch => ({
-        char: ch, stroke: 0, isSpace: false
-      }));
+      const spaceObj = getRandomBitSpace();
 
-      const lang = guessLangFromText(currentSourceString);
-      if (recognition.lang !== lang) {
-        try { recognition.stop(); } catch { }
-        recognition.lang = lang;
-        try { recognition.start(); } catch { }
+      if (
+        displayChars.length &&
+        displayChars.at(-1).isSpace
+      ) {
+        displayChars.pop();
+      }
+
+      const pos =
+        Math.random() * (displayChars.length - 1) | 0;
+
+      displayChars.splice(pos, 0, spaceObj);
+      hexQueue.push(spaceObj.hex);
+
+      if (hexQueue.length === 4) {
+        const rnd =
+          selectedPoem[
+          Math.random() * selectedPoem.length | 0
+          ];
+
+        displayChars.splice(
+          pos,
+          4,
+          {
+            char: rnd,
+            stroke: MAX_STROKE,
+            isSpace: false
+          }
+        );
+
+        hexQueue = [];
       }
 
       updateDisplay();
     }
 
-    recognition.onresult = (evt) => {
-      const transcript = evt.results[evt.results.length - 1][0].transcript.trim();
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    const recognition =
+      new SpeechRecognition();
+
+    recognition.lang = "ko-KR";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    recognition.onresult = evt => {
+      const transcript =
+        evt.results[
+          evt.results.length - 1
+        ][0].transcript.trim();
+
+      console.log(
+        "음성 인식 결과:",
+        transcript
+      );
+
       if (!transcript) return;
 
-      for (let i = 0; i < displayChars.length; i++) {
+      for (
+        let i = 0;
+        i < displayChars.length;
+        i++
+      ) {
         const o = displayChars[i];
-        if (!o.isSpace && transcript.includes(o.char)) {
+
+        if (
+          !o.isSpace &&
+          transcript.includes(o.char)
+        ) {
+          const originalChar = o.char;
           const sp = getRandomBitSpace();
+
+          console.log(
+            `음성 인식 적용: "${originalChar}" → 공백 문자, 대응값: ${sp.hex}, 위치: ${i}`
+          );
+
           displayChars[i] = sp;
           hexQueue.push(sp.hex);
 
           if (hexQueue.length === 4) {
-            const rnd = currentSourceString[(Math.random() * currentSourceString.length) | 0] || ' ';
-            const start = Math.max(0, i - 3);
-            displayChars.splice(start, 4, { char: rnd, stroke: 0, isSpace: false });
+            const collectedHexValues =
+              hexQueue.join("");
+
+            const rnd =
+              selectedPoem[
+              Math.random() *
+              selectedPoem.length | 0
+              ];
+
+            console.log(
+              `음성 변주: 대응값 ${collectedHexValues} → 원문 문자 "${rnd}" 재출현`
+            );
+
+            displayChars.splice(
+              i - 3,
+              4,
+              {
+                char: rnd,
+                stroke: 0,
+                isSpace: false
+              }
+            );
+
             hexQueue = [];
           }
         }
       }
+
       updateDisplay();
     };
-    recognition.onerror = e => console.error("Speech error:", e.error);
-    recognition.onend = () => {
-      try { recognition.start(); } catch { }
-    };
 
-    function debounce(fn, delay = 250) {
-      let t;
-      return (...args) => {
-        clearTimeout(t);
-        t = setTimeout(() => fn(...args), delay);
-      };
+    recognition.onerror = e =>
+      console.error(
+        "Speech error:",
+        e.error
+      );
+
+    recognition.onend = () =>
+      recognition.start();
+
+    function startRecognition() {
+      updateDisplay();
+      recognition.start();
+      changeColorWithRhythm();
+
+      bitInterval =
+        setInterval(
+          insertRandomBitSpace,
+          BIT_INTERVAL_MS
+        );
     }
 
-    const onSourceChanged = debounce(() => {
-      const translated = source.innerText || source.textContent || "";
-      setStatus(`LANG:${guessLangFromText(translated)}`);
-      rebuildFromSourceString(translated);
-    }, 300);
-
-    const mo = new MutationObserver(onSourceChanged);
-    mo.observe(source, {
-      characterData: true,
-      subtree: true,
-      childList: true
-    });
-
-    function start() {
-      let shown = JSON.parse(localStorage.getItem('shownPoemIndexes')) || [];
-      if (shown.length >= poems.length) shown = [];
-      const avail = poems.map((_, i) => i).filter(i => !shown.includes(i));
-      const idx = avail[Math.floor(Math.random() * avail.length)];
-      shown.push(idx);
-      localStorage.setItem('shownPoemIndexes', JSON.stringify(shown));
-
-      const selectedPoem = poems[idx];
-
-      source.textContent = selectedPoem;
-
-      setTimeout(() => {
-        const initial = source.innerText || source.textContent || "";
-        rebuildFromSourceString(initial);
-
-        try { recognition.start(); } catch { }
-        changeColorWithRhythm();
-        bitInterval = setInterval(insertRandomBitSpace, BIT_INTERVAL_MS);
-      }, 150);
-    }
-
-    document.body.addEventListener('click', doReload);
-    document.addEventListener('keydown', (e) => {
-      e.preventDefault();
-      doReload();
-    }, { passive: false });
-
-    let gamepadIndexes = [];
-    let prevButtonStates = {};
-    window.addEventListener('gamepadconnected', (e) => {
-      if (!gamepadIndexes.includes(e.gamepad.index)) gamepadIndexes.push(e.gamepad.index);
-      console.log('Gamepad connected:', e.gamepad.id);
-    });
-    window.addEventListener('gamepaddisconnected', (e) => {
-      gamepadIndexes = gamepadIndexes.filter(i => i !== e.gamepad.index);
-      console.log('Gamepad disconnected:', e.gamepad.id);
-    });
-    function pollGamepads() {
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      gamepadIndexes.forEach(idx => {
-        const gp = pads[idx];
-        if (!gp) return;
-        gp.buttons.forEach((btn, bIndex) => {
-          const key = `${idx}_${bIndex}`;
-          const wasPressed = prevButtonStates[key] || false;
-          const isPressed = btn.pressed === true;
-          if (isPressed && !wasPressed) doReload();
-          prevButtonStates[key] = isPressed;
-        });
-      });
-      requestAnimationFrame(pollGamepads);
-    }
-    requestAnimationFrame(pollGamepads);
-
-    window.onload = start;
+    window.onload = startRecognition;
   </script>
 </body>
 
