@@ -94,42 +94,87 @@
 <body onclick="location.reload()">
 
   <div class="text-output" id="outputText"></div>
-  <footer>천천히 소리내어 읽어 보세요</footer>
+  <footer>소리내어 읽어 보세요</footer>
 
   <script>
     const MAX_STROKE = 2;
     const BLUR_MULTIPLIER = 20;
     const BIT_INTERVAL_MS = 1000;
 
+    const MIN_WORDS = 4;
+    const MAX_WORDS = 9;
+
     let isAllBlurred = false;
 
-    const poems = [
-      `네 발바닥 즐거운! 푸르다! 손! 밤! 아홉의 오른쪽 물거품!  `,
-      `심심한 장미를 콧구멍에-!  `,
-      `딱딱하게 끊는 망치 바르면!  `,
-      `무거운 해 늙어 태어나면 개나리 웃지요.  `,
-      `크낙새 뿌리 무침? 파란 냄새 삼각형!  `,
-      `팔짝 뛰는 토끼색 칠한 재채기 세 쌍만 던져!  `
+    const sourcePoems = [
+      `네 발바닥 즐거운! 푸르다! 손! 밤! 아홉의 오른쪽 물거품!`,
+      `심심한 장미를 콧구멍에-!`,
+      `딱딱하게 끊는 망치 바르면!`,
+      `무거운 해 늙어 태어나면 개나리 웃지요.`,
+      `크낙새 뿌리 무침? 파란 냄새 삼각형!`,
+      `팔짝 뛰는 토끼색 칠한 재채기 세 쌍만 던져!`
     ];
 
-    let shown = JSON.parse(localStorage.getItem('shownPoemIndexes')) || [];
+    function shuffleArray(array) {
+      const shuffled = [...array];
 
-    if (shown.length >= poems.length) shown = [];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const randomIndex = Math.floor(Math.random() * (i + 1));
 
-    const avail = poems
-      .map((_, i) => i)
-      .filter(i => !shown.includes(i));
+        [shuffled[i], shuffled[randomIndex]] =
+          [shuffled[randomIndex], shuffled[i]];
+      }
 
-    const idx = avail[Math.floor(Math.random() * avail.length)];
+      return shuffled;
+    }
 
-    shown.push(idx);
+    function createRandomPoem() {
+      const wordPool = sourcePoems.flatMap(sentence =>
+        sentence.trim().split(/\s+/)
+      );
 
-    localStorage.setItem(
-      'shownPoemIndexes',
-      JSON.stringify(shown)
+      const maximumWordCount = Math.min(
+        MAX_WORDS,
+        wordPool.length
+      );
+
+      const minimumWordCount = Math.min(
+        MIN_WORDS,
+        maximumWordCount
+      );
+
+      const wordCount =
+        Math.floor(
+          Math.random() *
+          (maximumWordCount - minimumWordCount + 1)
+        ) + minimumWordCount;
+
+      const selectedWords =
+        shuffleArray(wordPool).slice(0, wordCount);
+
+      const lastIndex = selectedWords.length - 1;
+      const lastWord = selectedWords[lastIndex];
+
+      if (!/[.!?]$/.test(lastWord)) {
+        const endingMarks = ['!', '?', '.'];
+
+        const randomEnding =
+          endingMarks[
+          Math.floor(Math.random() * endingMarks.length)
+          ];
+
+        selectedWords[lastIndex] += randomEnding;
+      }
+
+      return selectedWords.join(' ');
+    }
+
+    const selectedPoem = createRandomPoem();
+
+    console.log(
+      "무작위로 조합된 문장:",
+      selectedPoem
     );
-
-    const selectedPoem = poems[idx];
 
     const output = document.getElementById("outputText");
 
@@ -168,7 +213,9 @@
     function getRandomBitSpace() {
       const ch =
         whitespaceChars[
-        Math.floor(Math.random() * whitespaceChars.length)
+        Math.floor(
+          Math.random() * whitespaceChars.length
+        )
         ];
 
       const hx = whitespaceHexMap[ch];
@@ -185,8 +232,11 @@
         .map(o => {
           if (o.isSpace) return o.html;
 
-          const strokePx = Math.min(o.stroke, MAX_STROKE);
-          const blurPx = strokePx * BLUR_MULTIPLIER;
+          const strokePx =
+            Math.min(o.stroke, MAX_STROKE);
+
+          const blurPx =
+            strokePx * BLUR_MULTIPLIER;
 
           if (o.char === '\n') return '<br>';
 
@@ -199,7 +249,9 @@
 
       const blurred =
         displayChars.filter(
-          o => !o.isSpace && o.stroke >= MAX_STROKE
+          o =>
+            !o.isSpace &&
+            o.stroke >= MAX_STROKE
         ).length;
 
       if (
@@ -244,7 +296,9 @@
         updateDisplay();
 
         setTimeout(() => {
-          beat = (beat + 1) % timings.length;
+          beat =
+            (beat + 1) % timings.length;
+
           nextBeat();
         }, timings[beat]);
       }
@@ -255,7 +309,9 @@
     function insertRandomBitSpace() {
       const unblurredCount =
         displayChars.filter(
-          o => !o.isSpace && o.stroke < MAX_STROKE
+          o =>
+            !o.isSpace &&
+            o.stroke < MAX_STROKE
         ).length;
 
       if (
@@ -276,15 +332,22 @@
       }
 
       const pos =
-        Math.random() * (displayChars.length - 1) | 0;
+        Math.random() *
+        (displayChars.length - 1) | 0;
 
-      displayChars.splice(pos, 0, spaceObj);
+      displayChars.splice(
+        pos,
+        0,
+        spaceObj
+      );
+
       hexQueue.push(spaceObj.hex);
 
       if (hexQueue.length === 4) {
         const rnd =
           selectedPoem[
-          Math.random() * selectedPoem.length | 0
+          Math.random() *
+          selectedPoem.length | 0
           ];
 
         displayChars.splice(
@@ -359,7 +422,7 @@
               ];
 
             console.log(
-              `음성 변주: 대응값 ${collectedHexValues} → 원문 문자 "${rnd}" 재출현`
+              `음성 변주: 대응값 ${collectedHexValues} → 조합 문장의 문자 "${rnd}" 재출현`
             );
 
             displayChars.splice(
