@@ -77,28 +77,6 @@
       color: rgba(0, 0, 0, 0);
     }
 
-    #micButton {
-      position: fixed;
-      top: calc(1rem + env(safe-area-inset-top));
-      left: 50%;
-      z-index: 100;
-      transform: translateX(-50%);
-      padding: 0.75rem 1rem;
-      border: 1px solid #000000;
-      border-radius: 0;
-      background: #ffffff;
-      color: #000000;
-      font-family: 'Noto Sans KR', sans-serif;
-      font-size: 0.9rem;
-      -webkit-appearance: none;
-      appearance: none;
-      touch-action: manipulation;
-    }
-
-    #micButton[hidden] {
-      display: none;
-    }
-
     footer {
       position: fixed;
       bottom: 0;
@@ -115,9 +93,8 @@
 
 <body onclick="location.reload()">
 
-  <button id="micButton" type="button">마이크 시작</button>
   <div class="text-output" id="outputText"></div>
-  <footer id="statusText">버튼을 누른 뒤 소리내어 읽어 보세요</footer>
+  <footer>소리내어 읽어 보세요</footer>
 
   <script>
     const MAX_STROKE = 2;
@@ -128,9 +105,6 @@
     const MAX_WORDS = 9;
 
     let isAllBlurred = false;
-    let isRecognitionRunning = false;
-    let shouldRestartRecognition = false;
-    let restartTimer = null;
 
     const sourcePoems = [
       `네 발바닥 즐거운! 푸르다! 손! 밤! 아홉의 오른쪽 물거품!`,
@@ -203,8 +177,6 @@
     );
 
     const output = document.getElementById("outputText");
-    const micButton = document.getElementById("micButton");
-    const statusText = document.getElementById("statusText");
 
     const whitespaceHexMap = {
       '\u200B': '0',
@@ -288,22 +260,8 @@
         blurred === total
       ) {
         isAllBlurred = true;
-        shouldRestartRecognition = false;
         clearInterval(bitInterval);
-
-        if (restartTimer) {
-          clearTimeout(restartTimer);
-          restartTimer = null;
-        }
-
-        if (recognition && isRecognitionRunning) {
-          try {
-            recognition.stop();
-          } catch (error) {
-            console.warn("음성 인식 종료 오류:", error);
-          }
-        }
-
+        recognition.stop();
         location.reload();
       }
     }
@@ -412,198 +370,91 @@
       window.SpeechRecognition ||
       window.webkitSpeechRecognition;
 
-    let recognition = null;
+    const recognition =
+      new SpeechRecognition();
 
-    function showMicButton(label) {
-      micButton.hidden = false;
-      micButton.disabled = false;
-      micButton.textContent = label;
-    }
+    recognition.lang = "ko-KR";
+    recognition.continuous = true;
+    recognition.interimResults = false;
 
-    function hideMicButton() {
-      micButton.hidden = true;
-    }
+    recognition.onresult = evt => {
+      const transcript =
+        evt.results[
+          evt.results.length - 1
+        ][0].transcript.trim();
 
-    function startSpeechRecognition() {
-      if (
-        !recognition ||
-        isRecognitionRunning ||
-        isAllBlurred ||
-        document.hidden
+      console.log(
+        "음성 인식 결과:",
+        transcript
+      );
+
+      if (!transcript) return;
+
+      for (
+        let i = 0;
+        i < displayChars.length;
+        i++
       ) {
-        return;
-      }
+        const o = displayChars[i];
 
-      try {
-        recognition.start();
-      } catch (error) {
-        console.error(
-          "음성 인식을 시작할 수 없습니다:",
-          error
-        );
-
-        isRecognitionRunning = false;
-        shouldRestartRecognition = false;
-
-        showMicButton("마이크 다시 시작");
-
-        statusText.textContent =
-          "마이크 시작 버튼을 다시 눌러 주세요";
-      }
-    }
-
-    if (SpeechRecognition) {
-      recognition = new SpeechRecognition();
-
-      recognition.lang = "ko-KR";
-
-      /*
-        iPhone Safari에서는 continuous가 안정적으로 이어지지 않으므로
-        한 번의 인식이 끝날 때마다 onend에서 다시 시작한다.
-      */
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        isRecognitionRunning = true;
-
-        hideMicButton();
-
-        statusText.textContent =
-          "소리내어 읽어 보세요";
-
-        console.log("음성 인식 시작");
-      };
-
-      recognition.onresult = evt => {
-        const transcript =
-          evt.results[
-            evt.results.length - 1
-          ][0].transcript.trim();
-
-        console.log(
-          "음성 인식 결과:",
-          transcript
-        );
-
-        if (!transcript) return;
-
-        for (
-          let i = 0;
-          i < displayChars.length;
-          i++
+        if (
+          !o.isSpace &&
+          transcript.includes(o.char)
         ) {
-          const o = displayChars[i];
+          const originalChar = o.char;
+          const sp = getRandomBitSpace();
 
-          if (
-            !o.isSpace &&
-            transcript.includes(o.char)
-          ) {
-            const originalChar = o.char;
-            const sp = getRandomBitSpace();
+          console.log(
+            `음성 인식 적용: "${originalChar}" → 공백 문자, 대응값: ${sp.hex}, 위치: ${i}`
+          );
+
+          displayChars[i] = sp;
+          hexQueue.push(sp.hex);
+
+          if (hexQueue.length === 4) {
+            const collectedHexValues =
+              hexQueue.join("");
+
+            const rnd =
+              selectedPoem[
+              Math.random() *
+              selectedPoem.length | 0
+              ];
 
             console.log(
-              `음성 인식 적용: "${originalChar}" → 공백 문자, 대응값: ${sp.hex}, 위치: ${i}`
+              `음성 변주: 대응값 ${collectedHexValues} → 조합 문장의 문자 "${rnd}" 재출현`
             );
 
-            displayChars[i] = sp;
-            hexQueue.push(sp.hex);
+            displayChars.splice(
+              i - 3,
+              4,
+              {
+                char: rnd,
+                stroke: 0,
+                isSpace: false
+              }
+            );
 
-            if (hexQueue.length === 4) {
-              const collectedHexValues =
-                hexQueue.join("");
-
-              const rnd =
-                selectedPoem[
-                Math.random() *
-                selectedPoem.length | 0
-                ];
-
-              console.log(
-                `음성 변주: 대응값 ${collectedHexValues} → 조합 문장의 문자 "${rnd}" 재출현`
-              );
-
-              displayChars.splice(
-                Math.max(0, i - 3),
-                4,
-                {
-                  char: rnd,
-                  stroke: 0,
-                  isSpace: false
-                }
-              );
-
-              hexQueue = [];
-            }
+            hexQueue = [];
           }
         }
+      }
 
-        updateDisplay();
-      };
-
-      recognition.onerror = event => {
-        console.error(
-          "음성 인식 오류:",
-          event.error
-        );
-
-        if (
-          event.error === "not-allowed" ||
-          event.error === "service-not-allowed"
-        ) {
-          shouldRestartRecognition = false;
-
-          showMicButton("마이크 다시 시작");
-
-          statusText.textContent =
-            "Safari의 웹사이트 설정에서 마이크 사용을 허용해 주세요";
-
-          return;
-        }
-
-        if (event.error === "audio-capture") {
-          shouldRestartRecognition = false;
-
-          showMicButton("마이크 다시 시작");
-
-          statusText.textContent =
-            "iPhone의 마이크를 사용할 수 없습니다";
-
-          return;
-        }
-
-        if (event.error === "network") {
-          statusText.textContent =
-            "네트워크 연결을 확인해 주세요";
-        }
-
-        if (event.error === "no-speech") {
-          statusText.textContent =
-            "목소리가 들리지 않았습니다. 다시 읽어 주세요";
-        }
-      };
-
-      recognition.onend = () => {
-        isRecognitionRunning = false;
-
-        console.log("음성 인식 종료");
-
-        if (
-          shouldRestartRecognition &&
-          !isAllBlurred &&
-          !document.hidden
-        ) {
-          restartTimer =
-            setTimeout(() => {
-              startSpeechRecognition();
-            }, 400);
-        }
-      };
-    }
-
-    function startArtwork() {
       updateDisplay();
+    };
+
+    recognition.onerror = e =>
+      console.error(
+        "Speech error:",
+        e.error
+      );
+
+    recognition.onend = () =>
+      recognition.start();
+
+    function startRecognition() {
+      updateDisplay();
+      recognition.start();
       changeColorWithRhythm();
 
       bitInterval =
@@ -613,96 +464,7 @@
         );
     }
 
-    micButton.addEventListener(
-      "click",
-      event => {
-        /*
-          body의 onclick 새로고침이 실행되지 않도록 막는다.
-        */
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (!SpeechRecognition) {
-          micButton.disabled = true;
-          micButton.textContent =
-            "음성 인식 미지원";
-
-          statusText.textContent =
-            "이 Safari에서는 웹 음성 인식을 지원하지 않습니다";
-
-          return;
-        }
-
-        shouldRestartRecognition = true;
-
-        micButton.disabled = true;
-        micButton.textContent =
-          "마이크 연결 중";
-
-        statusText.textContent =
-          "마이크 사용을 허용해 주세요";
-
-        /*
-          iPhone Safari에서는 반드시 사용자의 터치 안에서
-          recognition.start()를 호출해야 한다.
-        */
-        startSpeechRecognition();
-      }
-    );
-
-    document.addEventListener(
-      "visibilitychange",
-      () => {
-        if (document.hidden) {
-          shouldRestartRecognition = false;
-
-          if (restartTimer) {
-            clearTimeout(restartTimer);
-            restartTimer = null;
-          }
-
-          if (
-            recognition &&
-            isRecognitionRunning
-          ) {
-            try {
-              recognition.abort();
-            } catch (error) {
-              console.warn(
-                "음성 인식 중단 오류:",
-                error
-              );
-            }
-          }
-        } else if (
-          !isAllBlurred &&
-          SpeechRecognition
-        ) {
-          showMicButton(
-            "마이크 다시 시작"
-          );
-
-          statusText.textContent =
-            "마이크 시작 버튼을 다시 눌러 주세요";
-        }
-      }
-    );
-
-    window.addEventListener(
-      "load",
-      () => {
-        startArtwork();
-
-        if (!SpeechRecognition) {
-          micButton.disabled = true;
-          micButton.textContent =
-            "음성 인식 미지원";
-
-          statusText.textContent =
-            "이 Safari에서는 웹 음성 인식을 지원하지 않습니다";
-        }
-      }
-    );
+    window.onload = startRecognition;
   </script>
 </body>
 
